@@ -1,0 +1,187 @@
+#!/bin/bash
+
+# loadnews - a script from the Audio News fetching Script Set "newsme"
+
+# Based on the excellent work of Doug Crompton - WA3DSP "playnews" from 3/2015
+# playnews v0.5 - WA3DSP 3/2015
+# loadnews V1.0 - K8SN 10/2015 
+
+# loadnews is a script to download ARRL News or ARN and divide into 2.5 minute segments with breaks.
+# Includes voice messages before play, at breaks, and after play.
+
+# This code is written to work on the hamvoip.org BBB/RPi2 Allstar releases
+# All required packages are pre-installed on those systems.
+
+# For proper operation holdofftelem in rpt.conf should either not be defined or
+# defined as =0  This stops keyups from delaying the news during its playing
+
+# The audio files ARRLstart5, ARRLstart10, ARRLstart, ARRLcontinue, ARRLstop
+# and ARNstart, ARNstart10, ARNstart, ARNcontinue, ARNstop
+# are supplied but could be customized for your needs. The audio
+# files must be in the directory defined by VOICEDIR
+
+# ARRLstart10 or ARNstart10   - voice message at ten minutes before start
+# ARRLstart5 or ARNstart5     - voice message at five minutes before start
+# ARRLstart or ARNstart       - voice message at start of play
+# ARRLcontinue or ARNcontinue - voice message at breaks
+# ARRLstop or ARNstop         - voice message at end of play
+
+# Usage:
+# /etc/asterisk/local/newsme/loadnews ARN - will load ARN 
+# OR      
+# /etc/asterisk/local/newsme/loadnews ARN - will load ARRL 
+
+# Example crontab entry:
+# 00 18 * * 4 /etc/asterisk/local/newsme/loadnews ARN  &> /dev/null 2>&1
+#		- will load ARN news at 6pm on Fridays
+#AND
+# 15 18 * * 4 /etc/asterisk/local/newsme/loadnews ARRL &> /dev/null 2>&1	
+#		- will load ARRL news at 6:15pm local time on Fridays
+
+# Questions?  sam.nabkey@gmail.com
+#-------------------------------------------xxxx Start xxxx-------------------------------------------------
+
+# Does Config File Exist?
+	if [ ! -f /etc/asterisk/newsme.conf ]
+	  then
+	    echo "newsme config file not found - Did you copy it from your newsme directory"
+	    echo "to your /etc/asterisk directory? - This must be done for proper operation. "
+	  exit 1
+	fi
+	
+# Read Site Config File
+	source /etc/asterisk/newsme.conf
+
+#make and define the last run files
+	
+	mkdir -p /tmp/$DEFAULT_LAST_RUN/
+	runfile=/tmp/$DEFAULT_LAST_RUN/runlog.log
+	me=`basename "$0"`
+
+	echo "$(date +%Y-%m-%d.%H:%M:%S):($me):--- $me Requested ---" >> $runfile
+		
+# See if the VOICEDIR Files exist
+	if [ ! -f $VOICEDIR/ARNstart.ul ]
+	  then
+	    echo "newsme voice files not found - check VOICEDIR /etc/asterisk/newsme.conf"
+	    echo "$(date +%Y-%m-%d.%H:%M:%S):($me):No Voice Files Found - Script Ended" >> $runfile
+	    exit 1
+	fi
+
+# NEWSTYPE is either ARRL or ARN, Always required as parameter 1
+	if [ -z "$1" ]
+	  then
+	     echo "No Play type given - ARN or ARRL"
+	     echo "$(date +%Y-%m-%d.%H:%M:%S):($me):No News Type Requested - Script Ended" >> $runfile
+	     exit 1
+	  else
+	     NEWSTYPE=${1^^}
+	     if [ "$NEWSTYPE" != "ARN" ] && [ "$NEWSTYPE" != "ARRL" ]
+	        then 
+	           echo "Play type must be ARRL or ARN"
+	           echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Wrong File Type. Only ARRL or ARN Supported - Script Ended" >> $runfile
+	           exit 1
+	     fi
+	fi
+	
+	mkdir -p /tmp/$NEWSTYPE/	
+	
+# Remove Stale files
+  rm -f /tmp/$NEWSTYPE/*.ul
+	rm -f /tmp/$NEWSTYPE/news.mp3
+	echo "$(date +%Y-%m-%d.%H:%M:%S):($me):parms=Type:$NEWSTYPE" >> $runfile	
+# All is well
+	echo "Starting $me at $(date +%Y-%m-%d.%H:%M:%S)."
+	echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Parameters Correct - Script Starting" >> $runfile
+
+# Starting download
+	echo "Starting Download of $NEWSTYPE Audio News @ $(date +%H:%M:%S)"
+	echo "Starting $me at $(date +%Y-%m-%d.%H:%M:%S)."
+	echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Fetching $NEWSTYPE Files" >> $runfile
+	
+	if [ $NEWSTYPE == "ARN" ]
+	  then 
+		# Timeout set to 15 seconds with 4 retries. Set the timeout longer for slow circuits.
+	    	wget -T 7 --tries=4 http://www.arnewsline.org/storage/audio/news.mp3 -P /tmp/$NEWSTYPE
+	else
+		# not ARN so get ARRL
+	    	# wget -T 7 --tries=4 -r -O /tmp/$NEWSTYPE/news.mp3 http://www.arrl.org/files/file/News/Audio%20News/AAN-$(date --date="last friday" +%Y-%m-%d).mp3
+		wget -T 7 --tries=4 -r -O /tmp/$NEWSTYPE/news.mp3 http://content.blubrry.com/arrlaudionews/AAN-$(date --date="last friday" +%Y-%m-%d).mp3
+	fi
+#Check to see if we got anything
+	if [ -f /tmp/$NEWSTYPE/news.mp3 ];
+	 then
+	 echo "Download complete @ $(date +%H:%M:%S)"
+	 echo "$(date +%Y-%m-%d.%H:%M:%S):($me):$NEWSTYPE Files Downloaded" >> $runfile
+	else
+	 echo "Download failed"
+	 echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Download Failed - Script Ended" >> $runfile
+	 exit 0
+ fi
+	 
+# Lets see if we really got an MP3 or if we just got a
+# Text File or something besides Audio
+	filesize=$(wc -c < /tmp/$NEWSTYPE/news.mp3)
+	if [ $filesize -lt 100000 ]
+	 then
+	  echo "File size too small for play"		    
+		echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Small File recieved but not audio? - Script Ended" >> $runfile
+		rm -rf /tmp/$NEWSTYPE/news.mp3
+		echo 1 > /tmp/$NEWSTYPE/maxpart.txt
+		cp $VOICEDIR/nonewsdownloaded.ul /tmp/$NEWSTYPE/wholenews.ul
+		cp $VOICEDIR/nonewsdownloaded.ul /tmp/$NEWSTYPE/news.part1.ul
+		echo "Subbing error file to advise the user"
+		exit 0
+	fi 
+	 
+#We did, so lets convert...
+	echo "Converting from MP3 to individual ulaw format files"
+	echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Converting MP3 to WAV Chunks" >> $runfile
+	lame -h --decode /tmp/$NEWSTYPE/news.mp3 /tmp/$NEWSTYPE/news2.wav &> /dev/null 2>&1
+	
+# Get the length of the file in seconds
+	LENGTH=`soxi -D /tmp/$NEWSTYPE/news2.wav`
+	START=0
+# SET increments
+	
+# Calculate number of segments
+	MAXPART=`echo $LENGTH/$INCREMENT | bc` 
+	let "MAXPART += 1"
+	PART="1"
+	
+#write maxpart.txt file so gonews and cronnews know how many lines
+	echo $MAXPART > /tmp/$NEWSTYPE/maxpart.txt
+
+# Divide into "incremented" segments
+	while [ "$PART" -le "$MAXPART" ]; do
+	      sox --temp /tmp/$NEWSTYPE  /tmp/$NEWSTYPE/news2.wav /tmp/$NEWSTYPE/news.part$PART.wav trim $START $INCREMENT &> /dev/null 2>&1
+	      echo "Creating /tmp/$NEWSTYPE/news.part$PART.wav"
+	      echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Creating a $INCREMENT second WAV File chunk." >> $runfile
+	      START=$(($START-5+$INCREMENT))
+	      let "PART += 1"
+	done
+
+# Convert each segment to ulaw
+	PART="1"
+	while [ "$PART" -le "$MAXPART" ]; do
+	      sox --temp /tmp/$NEWSTYPE -V /tmp/$NEWSTYPE/news.part$PART.wav -r 8000 -c 1 -t ul /tmp/$NEWSTYPE/news.part$PART.ul &> /dev/null 2>&1
+	      echo "Converting to /tmp/$NEWSTYPE/news.part$PART.ul"
+	      echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Creating a UL Chunk from a WAV Chunk." >> $runfile
+	      rm /tmp/$NEWSTYPE/news.part$PART.wav
+	      let "PART += 1"
+	done
+
+# Convert complete to UL
+	echo "Writing uninterupted UL Version"
+	echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Creating a UL File for PLAYALL" >> $runfile
+	sox --temp /tmp/$NEWSTYPE -V /tmp/$NEWSTYPE/news2.wav -r 8000 -c 1 -t ul /tmp/$NEWSTYPE/wholenews.ul &> /dev/null 2>&1
+		
+# Clean up
+	rm /tmp/$NEWSTYPE/news2.wav
+	rm /tmp/$NEWSTYPE/news.mp3
+	
+	echo "Ended at $(date +%Y-%m-%d.%H:%M:%S)."
+	echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Script Ended" >> $runfile
+	
+# End
+exit 0

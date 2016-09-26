@@ -1,0 +1,20 @@
+# This file needs to reside in your /etc/asterisk directory.
+
+# The following variables need to be set if different for your install
+# Directory for voice files
+	VOICEDIR="/etc/asterisk/local/newsme"
+
+# Mode - 'localplay' or 'playback' (global)
+# 'localplay' only plays on the node specified.
+# 'playback' plays on the specified node and ALL nodes connected to it.
+	 MODE="localplay"
+
+# Default node if not specified on the command line
+	DEFAULT_NODE="575"
+	
+# Temp Directory for last run log files (always considers /tmp/
+	DEFAULT_LAST_RUN="newsmelogs"
+
+
+# Increment for breaks in news play
+       INCREMENT="160"

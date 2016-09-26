@@ -1,0 +1,166 @@
+# !/bin/bash/
+#
+# # stopnews v1.0 - Sam Nabkey K8SN 
+# Based on  the excellent newsme v0.5 - WA3DSP Doug Crompton 3/2015
+#!/bin/bash
+
+# cronnews - a script from the Audio News fetching Script Set "newsme"
+
+# Based on  the excellent newsme v0.5 - WA3DSP Doug Crompton 3/2015
+# gonews v1.0 - Sam Nabkey K8SN 10/2015
+#
+# gonews is a script to play ARRL News or ARN which were processed by 
+# getnews.
+#
+# IF the news files do not exist, gonews will advise the requester and 
+# download it on the fly.
+#
+# The gonews script includes voice messages before play, at breaks, and after play.
+# This script can be configured for global playback! 
+# DO NOT run this on a multi-node connected circuit without consideration. 
+# Change MODE to localplay for strictly local node play.
+
+# This code is written to work on the hamvoip.org BBB/RPi2 Allstar releases
+# All required packages are pre-installed on those systems.
+
+# For proper operation holdofftelem in rpt.conf should either not be defined or
+# defined as =0  This stops keyups from delaying the news during its playing
+
+# The audio files ARRLstart5, ARRLstart10, ARRLstart, ARRLcontinue, ARRLstop
+# and ARNstart, ARNstart10, ARNstart, ARNcontinue, ARNstop
+# are supplied but could be customized for your needs. The audio
+# files must be in the directory defined by VOICEDIR
+
+# ARRLstart10 or ARNstart10   - voice message at ten minutes before start
+# ARRLstart5 or ARNstart5     - voice message at five minutes before start
+# ARRLstart or ARNstart       - voice message at start of play
+# ARRLcontinue or ARNcontinue - voice message at breaks
+# ARRLstop or ARNstop         - voice message at end of play
+
+# Usage: stopnews {NODE} [CRON]
+
+#	Example:
+# 	/etc/asterisk/local/newsme/stopnews
+#			- Stops the current playing news the defaulted Node
+
+# 	/etc/asterisk/local/newsme/stopnews 2000
+#			- Stops the current playing news on node 2000
+
+#	Example:
+# 	/etc/asterisk/local/newsme/stopnews 2000 CRON
+#			- Stops the current playing news on node 2000
+
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# Does Config File Exist?
+	if [ ! -f /etc/asterisk/newsme.conf ]
+	  then
+		echo "newsme config file not found - Did you copy it from your newsme directory"
+		echo "to your /etc/asterisk directory? - This must be done for proper operation. "
+	  exit 1
+	fi
+	
+# Read Site Config File
+	source /etc/asterisk/newsme.conf
+	
+#make and define the last run files
+	mkdir -p /tmp/$DEFAULT_LAST_RUN/
+	runfile=/tmp/$DEFAULT_LAST_RUN/runlog.log
+	me=`basename "$0"`
+	
+# # Optionally defined here or as optional third command line parameter
+	if [ -z "$1" ]
+	  then
+	     NODE=$DEFAULT_NODE
+	  else
+	     NODE=$1
+	fi
+
+#  Optionally defined here or as optional third command line parameter
+	if [ -z "$2" ]
+	  then
+	     KILLTYPE="PLAYING"
+	  else
+	     KILLTYPE=$2
+	fi
+
+
+	echo "$(date +%Y-%m-%d.%H:%M:%S):($me):--- $me Requested ---" >> $runfile
+		echo "$(date +%Y-%m-%d.%H:%M:%S):($me):parms=Node:$NODE:Mode=$KILLTYPE" >> $runfile	
+# Stopping News
+	echo "Starting $me at $(date +%Y-%m-%d.%H:%M:%S)."
+echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Parameters Correct - Script Starting" >> $runfile
+	
+	if [ $KILLTYPE == "CRON" ] 
+		then
+			if [ -f /tmp/${NODE}cronnewspid.txt ] 
+				then
+					echo "Killing a CRON Event"
+					echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Killing a CRON Event Requested" >> $runfile		
+					newspid=$(</tmp/${NODE}cronnewspid.txt)
+					rm -f /tmp/${NODE}cronnewspid.txt
+				else
+					echo "No scheduled CRON event to Kill... exiting"
+					echo "$(date +%Y-%m-%d.%H:%M:%S):($me):No scheduled CRON event to Kill." >> $runfile
+					echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Script ending" >> $runfile
+					exit 1
+			fi
+									
+		else
+		
+			if [ -f /tmp/${NODE}newspid.txt ] 
+				then
+					echo "Flushing Telemetery"
+					echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Flushing Telemetery " >> $runfile
+					/usr/bin/asterisk -rx " rpt cmd $NODE cop 24 1"
+					echo "Telemetery flushed" 
+					echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Telemetery flushed" >> $runfile
+					newspid=$(</tmp/${NODE}newspid.txt)
+					rm -f /tmp/${NODE}newspid.txt
+					echo "$(date +%Y-%m-%d.%H:%M:%S):($me):removing signal file" >> $runfile	
+					
+										
+				else
+					echo "Nothing appears to be playing. Flushing Telemetery anyways..." 
+					echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Nothing Playing. Force Flush" >> $runfile
+					echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Flushing Telemetery " >> $runfile
+					/usr/bin/asterisk -rx " rpt cmd $NODE cop 24 1"
+					echo "Telemetery flushed" 
+					echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Telemetery flushed" >> $runfile
+					echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Script Ended" >> $runfile
+					exit 1
+			fi
+							 	  
+	  fi
+# Retrieve the PID from the running files out in the /tmp Directory so we can kill the process. Then delete it when we are done
+	 echo "News is running at Process ID $newspid. Killing it now"
+	 echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Killing Process $newspid." >> $runfile
+	 kill -9  $newspid
+	 echo "Process $newspid Killed"
+	 echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Process $newspid Killed" >> $runfile
+ 
+# IF the news was playing without breaks, then we need to turn back on the time out timer. Then delete the signal file.
+	if [  -f /tmp/${NODE}playall.run ]
+	then
+		echo "Turning TOT back on"
+		echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Turning TOT Back on" >> $runfile
+		/usr/bin/asterisk -rx " rpt cmd $1 cop 7 1"
+		rm -f /tmp/${NODE}playall.run
+		echo "Ended at $(date +%Y-%m-%d.%H:%M:%S)."
+		
+	fi
+		NEWSTYPE=$(</tmp/${NODE}newstype.txt)
+		# Append end message with 2 second delay
+		cat "$VOICEDIR/silence2.ul" "$VOICEDIR/${NEWSTYPE}stop.ul" > /tmp/$NEWSTYPE/news.ul
+		/usr/bin/asterisk -rx "rpt $MODE $NODE /tmp/$NEWSTYPE/news"
+		# Terminate script at end of audio
+		LENGTH=`soxi -D /tmp/$NEWSTYPE/news.ul 2>/dev/null`
+		DELAY=${LENGTH/.*} 
+		sleep $DELAY
+		rm -f /tmp/${NODE}newstype.txt
+		rm -f /tmp/news.ul
+# All done!
+	echo "Ended at  $(date +%Y-%m-%d.%H:%M:%S)."
+	echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Script Ended" >> $runfile
+
+exit 0

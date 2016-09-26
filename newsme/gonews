@@ -1,0 +1,254 @@
+#!/bin/bash
+
+# Based on  the excellent playnews v0.5 - WA3DSP Doug Crompton 3/2015
+# gonews v1.0 - Sam Nabkey K8SN 10/2015
+#
+# gonews is a script to play ARRL News or ARN which were processed by 
+# getnews.
+#
+# IF the news files do not exist, gonews will advise the requester and 
+# download it on the fly.
+#
+# The gonews script includes voice messages before play, at breaks, and after play.
+# This script can be configured for global playback! 
+# DO NOT run this on a multi-node connected circuit without consideration. 
+# Change MODE to localplay for strictly local node play.
+
+# This code is written to work on the hamvoip.org BBB/RPi2 Allstar releases
+# All required packages are pre-installed on those systems.
+
+# For proper operation holdofftelem in rpt.conf should either not be defined or
+# defined as =0  This stops keyups from delaying the news during its playing
+
+# The audio files ARRLstart5, ARRLstart10, ARRLstart, ARRLcontinue, ARRLstop
+# and ARNstart, ARNstart10, ARNstart, ARNcontinue, ARNstop
+# are supplied but could be customized for your needs. The audio
+# files must be in the directory defined by VOICEDIR
+
+# ARRLstart10 or ARNstart10   - voice message at ten minutes before start
+# ARRLstart5 or ARNstart5     - voice message at five minutes before start
+# ARRLstart or ARNstart       - voice message at start of play
+# ARRLcontinue or ARNcontinue - voice message at breaks
+# ARRLstop or ARNstop         - voice message at end of play
+
+# Usage: gonews NEWSTYPE {NODE} [ALL]
+
+# Example: /etc/asterisk/local/newsme/gonews ARRL
+#		- will play the ARRL Audio News in segments on the default Node
+
+# Example: /etc/asterisk/local/newsme/gonews ARRL 2000 ALL
+#		- will play back the entire ARRL news on node 2000 with no breaks after
+#		- killing the TOT at start and then restoring the TOT When done.
+
+# Example: /etc/asterisk/local/newsme/gonews ARN 2001
+#		- will play the ARN in segments	on node 2001
+		
+#-------------------------------------------------------------xxxx Start xxxx-------------------------------------
+
+# Does Config File Exist?
+	if [ ! -f /etc/asterisk/newsme.conf ]
+	  then
+	    echo "newsme config file not found - Did you copy it from your newsme directory"
+	    echo "to your /etc/asterisk directory? - This must be done for proper operation. "
+	  exit 1
+	fi
+
+if [ -f /tmp/event ]
+	then 
+	exit 1
+fi
+	
+# Read Site Config File
+	source /etc/asterisk/newsme.conf
+	
+#make and define the last run files
+	mkdir -p /tmp/$DEFAULT_LAST_RUN/
+	runfile=/tmp/$DEFAULT_LAST_RUN/runlog.log
+	me=`basename "$0"`
+	
+# Starting
+	echo "Starting $me at $(date +%Y-%m-%d.%H:%M:%S)."
+	echo "$(date +%Y-%m-%d.%H:%M:%S):($me):--- $me Requested ---" >> $runfile
+	echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Checking Parameters" >> $runfile
+
+# Make sure the files are in the VOICEDIR.
+	if [ ! -f $VOICEDIR/ARNstart.ul ]
+	  then
+	    echo "newsme voice files not found - check VOICEDIR in newsme.conf"
+	    echo "$(date +%Y-%m-%d.%H:%M:%S):($me):No Voice Files Found. Script Ended" >> $runfile
+	    exit 1
+	fi
+
+# Select News Source
+	if [ -z "$1" ]
+	  then
+	     echo "No Play type given - ARN or ARRL"
+	     echo "$(date +%Y-%m-%d.%H:%M:%S):($me):No news type selected. Script Ended" >> $runfile
+	     exit 1
+	  else
+	     NEWSTYPE=${1^^}
+	     if [ "$NEWSTYPE" != "ARN" ] && [ "$NEWSTYPE" != "ARRL" ]
+	        then 
+	           echo "Play type must be ARRL or ARN"
+	           echo "$(date +%Y-%m-%d.%H:%M:%S):($me):unsupported news type $NEWSTYPE. Script Ended" >> $runfile
+	           exit 1
+	  	fi
+	fi
+
+# Node number to play on or from
+# Optionally defined here or as optional second command line parameter
+	if [ -z "$2" ]
+	  then
+	     NODE=$DEFAULT_NODE
+	  else
+	     NODE=$2
+	fi
+	
+# Check to see if we are playing the entire thing without breaks or if we are going to do it in chunks.
+	if [ -z "$3" ]
+	  then
+	     PLAYALL="NO"
+	  else
+	     PLAYALL=$3
+	     ANSWER="YES"
+	fi
+	echo "$(date +%Y-%m-%d.%H:%M:%S):($me):parms=Type=$NEWSTYPE:Node=$NODE:PLAYALL=$ANSWER" >> $runfile
+	echo "welcome to gonews..."
+	echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Parameters Correct - Script Starting" >> $runfile
+
+# Write the PID of this script to newspid.txt so if we need to stop it with stopnews we know where it lives.
+	PID=$$
+	echo $PID > /tmp/${NODE}newspid.txt
+	echo "Process ID for this session is $PID."
+	echo "$(date +%Y-%m-%d.%H:%M:%S):($me):PID for this session is $PID" >> $runfile
+
+# Write the news type in a file so we can find it to play the proper stop announcement if stopnews needs it.
+	echo $NEWSTYPE > /tmp/${NODE}newstype.txt
+	echo "News Type for this session is $NEWSTYPE"
+	
+# Check to see if the /tmp/$NEWSTYPE/maxpart.txt file is present and accounted for.
+# IF not, we need to go get the files from the selected Service
+	if [ ! -f /tmp/$NEWSTYPE/maxpart.txt ]
+	  then
+	  	echo "No $NEWSTYPE News to play. No problem, give me a minute and I will get it:"
+	    echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Requested News not on file - Fetching" >> $runfile
+	     /usr/bin/asterisk -rx "rpt $MODE $NODE $VOICEDIR/NoNews"
+	     sleep 5
+	     echo "$(date +%Y-%m-%d.%H:%M:%S):($me):switching to loadnews - Script paused" >> $runfile
+	    /etc/asterisk/local/newsme/loadnews $NEWSTYPE
+	    echo "Okay got it.  lets rock!"
+	    echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Fetched - Script Continues" >> $runfile
+	fi
+
+# Sending Station ID
+	echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Sending Inital ID" >> $runfile
+	/usr/bin/asterisk -rx " rpt cmd $NODE status 11 1"
+	
+	
+# send start announcment
+	sleep 3
+	cat $VOICEDIR/${NEWSTYPE}start.ul > /tmp/$NEWSTYPE/news.ul
+	/usr/bin/asterisk -rx "rpt $MODE $NODE /tmp/$NEWSTYPE/news"
+	echo "$NEWSTYPE Greeting Sent"
+	echo "$(date +%Y-%m-%d.%H:%M:%S):($me):$NEWSTYPE Greeting Sent" >> $runfile
+	sleep 5
+	rm -rf /tmp/$NEWSTYPE/news.ul
+	
+	# Determine if we are going to split these or not.
+
+	if [ $PLAYALL != "ALL" ]
+		then
+		# Playing in Chunks	
+		echo "Determing Amount of files and the size"
+		# maxpart.txt contains the number of parts.
+		MAXPART=$(</tmp/$NEWSTYPE/maxpart.txt)
+		echo "The number of $INCREMENT second parts this week is $MAXPART $INCREMENT second seqments"
+		echo "$(date +%Y-%m-%d.%H:%M:%S):($me):News to play back in $MAXPART seqments" >> $runfile
+		
+		# Start news
+		echo "$NEWSTYPE  news now playing on $NODE!" 
+		echo "$(date +%Y-%m-%d.%H:%M:%S):($me):$NEWSTYPE playing on $NODE" >> $runfile
+		PART="1"
+		while [ "$PART" -le "$MAXPART" ]; do
+		
+		
+		if [ "$PART" -lt  "$MAXPART" ]; then 					
+		# Add Station break message with 1 second delay
+		cat /tmp/$NEWSTYPE/news.part$PART.ul $VOICEDIR/silence1.ul "$VOICEDIR/${NEWSTYPE}continue.ul" > /tmp/$NEWSTYPE/news.ul  
+		/usr/bin/asterisk -rx "rpt $MODE $NODE /tmp/$NEWSTYPE/news"
+		LENGTH=`soxi -D /tmp/$NEWSTYPE/news.ul 2>/dev/null`
+		DELAY=${LENGTH/.*}
+		echo "Playing file /tmp/$NEWSTYPE/news.part$PART.ul"
+		echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Playing a $DELAY Second audio file ($PART of $MAXPART)" >> $runfile
+		echo "Sleeping for $DELAY" 
+		sleep $DELAY
+		echo "Done Sleeping"	
+		echo "Station Break"
+		echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Station Break" >> $runfile
+		sleep 15
+						
+	else
+					
+		# Append end message with 2 second delay
+		cat /tmp/$NEWSTYPE/news.part$PART.ul $VOICEDIR/silence2.ul "$VOICEDIR/${NEWSTYPE}stop.ul" > /tmp/$NEWSTYPE/news.ul
+		/usr/bin/asterisk -rx "rpt $MODE $NODE /tmp/$NEWSTYPE/news"
+		# Terminate script at end of audio
+		LENGTH=`soxi -D /tmp/$NEWSTYPE/news.ul 2>/dev/null`
+		DELAY=${LENGTH/.*}
+		echo "Playing file /tmp/$NEWSTYPE/news.part$PART.ul"
+		echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Playing the final $DELAY Second audio file ($PART of $MAXPART)" >> $runfile
+		echo "Sleeping for $DELAY" 
+		sleep $DELAY
+		echo "Done Sleeping"
+	fi
+
+		let "PART += 1"
+		done
+		rm -rf  /tmp/$NEWSTYPE/news.ul
+		echo "Ended at $(date +%Y-%m-%d.%H:%M:%S)."
+		echo "$(date +%Y-%m-%d.%H:%M:%S):($me):News Ends" >> $runfile
+		
+	else
+
+		#Playing the entire news without breaks.  after setting the timeout timer off..
+		# Echo the PID to a signal file so when we are done we can restore the timeout timer.
+		echo $PID > /tmp/${NODE}playall.run
+
+		# Killing Time Out Timer
+		echo "$(date +%Y-%m-%d.%H:%M:%S):($me):setting TOT to off on node $NODE" >> $runfile
+		/usr/bin/asterisk -rx "rpt cmd  $NODE cop 8 1"
+		sleep 1
+		rm -rf /tmp/$NEWSTYPE/news.ul
+		echo "5 Seconds to $NEWSTYPE news."
+		echo "$(date +%Y-%m-%d.%H:%M:%S):($me):$NEWSTYPE starting in 5 seconds" >> $runfile
+		sleep 4
+		rm -rf /tmp/$NEWSTYPE/news.ul				
+						
+		# Append end message with 2 second delay
+		cat /tmp/$NEWSTYPE/wholenews.ul $VOICEDIR/silence2.ul "$VOICEDIR/${NEWSTYPE}stop.ul" > /tmp/$NEWSTYPE/news.ul
+		/usr/bin/asterisk -rx "rpt $MODE $NODE /tmp/$NEWSTYPE/news"
+		echo "WE are rocking out the entire  $NEWSTYPE news now on $NODE without any breaks!"
+		LENGTH=`soxi -D /tmp/$NEWSTYPE/news.ul 2>/dev/null`
+		DELAY=${LENGTH/.*}
+		echo "$(date +%Y-%m-%d.%H:%M:%S):($me):playing $NEWSTYPE on node $NODE duration:$DELAY Seconds)" >> $runfile
+		echo "Sleeping for $DELAY Seconds" 
+		sleep $DELAY
+		echo "Done Sleeping"
+		rm -rf /tmp/$NEWSTYPE/news.ul
+		echo "$(date +%Y-%m-%d.%H:%M:%S):($me):resetting TOT to  on node $NODE" >> $runfile
+		/usr/bin/asterisk -rx "rpt cmd  $NODE cop 7 1"
+	fi
+#End of News. Clean up
+	sleep 5
+	echo "News Ended at $(date +%Y-%m-%d.%H:%M:%S)."
+	echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Cleaning Up" >> $runfile
+	rm -rf /tmp/$NEWSTYPE/news.ul
+	rm -rf /tmp/${NODE}playall.run
+	rm -rf /tmp/${NODE}newspid.txt
+	rm -rf /tmp/${NODE}newstype.txt
+
+
+# Done
+echo "Script Ended at $(date +%Y-%m-%d.%H:%M:%S)."
+echo "$(date +%Y-%m-%d.%H:%M:%S):($me):Script End" >> $runfile
+exit 0
