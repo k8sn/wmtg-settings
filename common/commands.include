@@ -1,0 +1,104 @@
+;commands.include
+;Command common acrossed all nodes provided or maintained by WMTG
+;single digit public commands
+
+0=autopatchdn
+1=ilink,1 ; Disconnect Link
+2=ilink,2 ; Connect Link MOnitor Only
+3=ilink,3 ; Connect Link Transieve
+4=ilink,4 ; Enter Command Mode on another Node
+5=macro,1 ; Macro Prefix
+6=autopatchup,noct=1,farenddisconnect=1,dialtime=20000  ; Autopatch up
+
+;double digit public commands
+70=ilink,5  ; System Status
+71=ilink,6  ; Disconnect all Links
+72=ilink,7  ; Play Last Node to Key Up
+73=ilink,15 ; FULL system Status - all nodes
+74=ilink,16 ; Reconnect disconnected links disconnected with disconnect all links command
+75=ilink,8  ; Connect Link LOCAL monitor only
+76=
+77=
+78=
+79=
+80=status,11 ;Force ID LOCAL ONLY
+81=status,12 ; GIve Time of Day LOCAL ONLY
+82=status,3  ; Give Software Verison
+83=status,5  ; Last DTMF User
+84=cop,32    ; DTMF TEST
+85=
+86=
+87=
+88=cop,55    ;Parrot Once if parrot mode is disabled
+89=autopatchup,context=command_process,noct=1,farenddisconnect=1,dialtime=7000,quiet=1; Command Processing
+99=cop,6  ; ptt phone mode
+
+; Triple digit control operator /owner codes
+900=cop,3    ;disable system
+901=cop,2    ;enable system
+903=cop,1    ;System warm boot
+902=
+903=
+904=cop,4    ;Test Tone On/Off
+905=cop,5    ;dump system variables
+906=
+907=cop,7    ;Time out timer enable
+908=cop,8    ;Time out timer disable
+909=cop,9    ;Autopatch enable
+
+910=cop,10   ;Autopatch disable
+911=cop,11   ;Link enable
+912=cop,12   ;Link disable
+913=cop,13   ;Query System State
+914=cop,14   ;Change System State
+915=cop,15   ;Scheduler Enable
+916=cop,16   ;Scheduler Disable
+917=cop,17   ;User functions (time, id, etc) enable
+918=cop,18   ;User functions (time, id, etc) disable
+919=cop,19   ;Select alternate hang timer
+
+920=cop,20   ;Select standard hang timer
+921=cop,21   ;Enable Parrot Mode
+922=cop,22   ;Disable Parrot Mode
+923=cop,23   ;Birdbath (Current Parrot Cleanup/Flush)
+924=cop,24   ;Flush all telemetry
+925=cop,25   ;Query !!!!last node un-keyed!!!!
+926=cop,26   ;Query all nodes keyed/unkeyed
+927=cop,27   ;Reset DAQ minimum on a pin
+928=cop,28   ;Reset DAQ maximum on a pin
+929=
+
+930=cop,30   ;Recall Memory Setting in Attached Xcvr
+931=cop,31   ;Channel Selector for Parallel Programmed Xcvr
+932=
+933=cop,33   ;Local Telemetry Output Enable
+934=cop,34   ;Local Telemetry Output Disable
+935=cop,35   ;Local Telemetry Output on Demand
+936=cop,36   ;Foreign Link Local Output Path Enable
+937=cop,37   ;Foreign Link Local Output Path Disable
+938=cop,38   ;Foreign Link Local Output Path Follows Local Telemetry
+939=cop,39   ;Foreign Link Local Output Path on Demand
+
+940=cop,40   ;IRLP announce Enable
+941=cop,41   ;IRLP announce Disable
+942=cop,42   ;Echolink announce node # only
+943=cop,43   ;Echolink announce node Callsign only
+944=cop,44   ;Echolink announce node # & Callsign
+945=cop,45   ;Link Activity timer enable
+946=cop,46   ;Link Activity timer disable
+947=cop,47   ;Reset "Link Config Changed" Flag
+948=cop,48   ;Send Page-Tone specs separated by ( )
+949=cop,49   ;Disable incoming connections (control state NOICE)
+
+950=cop,50   ;Enable incoming connections (control state NOICD)
+951=cop,51   ;Enable sleep mode
+952=cop,52   ;Disable sleep mode
+953=cop,53   ;Wake up from sleep
+954=cop,54   ;Go to sleep
+955=cop,60   ;SEND MDC-1200 Burst
+956=cop,56   ;Rx CTCSS Enable
+957=cop,57   ;Rx CTCSS Disable
+958=cop,58   ;Tx CTCSS On Input only Enable
+959=cop,59   ;Tx CTCSS On Input only Disable
+
+; 98 series up to local nodes
